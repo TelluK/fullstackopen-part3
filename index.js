@@ -1,6 +1,9 @@
 const express = require('express')
 const app = express()
 
+// morgan is HTTP request logger middleware for node.js
+const morgan = require('morgan')
+
 let persons = [
   {
     id: 1,
@@ -25,7 +28,25 @@ let persons = [
   }
 ]
 
+// const requestLogger = (req, res, next) => {
+//   console.log('--- requestLogger ---')
+//   console.log('Method:', req.method)
+//   console.log('Path:  ', req.path)
+//   console.log('request body:  ', req.body)
+//   console.log('---')
+//   next()
+// }
+
 app.use(express.json())
+
+// tiny is minimal output -> :method :url :status :res[content-length] - :response-time ms
+app.use(morgan('tiny'))
+
+// create new token for morgan to use
+morgan.token('body', (req, res) => JSON.stringify(req.body))
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
+
+// app.use(requestLogger)
 
 app.get('/', (req, res) => {
   res.send('<h1>This is my phonebook</h1>')
@@ -42,11 +63,12 @@ app.get('/api/persons', (req, res) => {
   res.json(persons)
 })
 
-app.get('/api/persons/:id', (req,res) => {
+app.get('/api/persons/:id', (req, res) => {
+  console.log(req.body)
   const id = Number(req.params.id)
   console.log('id', id)
   const person = persons.find( person => {
-    console.log(person.id, typeof person.id, id, typeof id, person.id === id)
+    // console.log(person.id, typeof person.id, id, typeof id, person.id === id)
     return person.id === id
   })
   console.log('person:', person)
@@ -94,6 +116,12 @@ app.post('/api/persons', (req, res) => {
 
   res.json(person)
 })
+
+const unknownEndpoint = (req, res) => {
+  res.status(404).send({ error: 'unknown endpoint' })
+}
+
+app.use(unknownEndpoint)
 
 const PORT = 3001
 app.listen(PORT, () => {
