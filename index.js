@@ -41,6 +41,9 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms :b
 
 app.use(cors())
 
+// express will first check if the build directory contains a file corresponding to the request's address
+app.use(express.static('build'))
+
 app.get('/', (req, res) => {
   res.send('<h1>This is my phonebook</h1>')
 })
