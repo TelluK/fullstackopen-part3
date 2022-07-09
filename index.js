@@ -1,5 +1,6 @@
 const express = require('express')
 const app = express()
+const cors = require('cors')
 
 // morgan is HTTP request logger middleware for node.js
 const morgan = require('morgan')
@@ -28,25 +29,17 @@ let persons = [
   }
 ]
 
-// const requestLogger = (req, res, next) => {
-//   console.log('--- requestLogger ---')
-//   console.log('Method:', req.method)
-//   console.log('Path:  ', req.path)
-//   console.log('request body:  ', req.body)
-//   console.log('---')
-//   next()
-// }
 
 app.use(express.json())
 
 // tiny is minimal output -> :method :url :status :res[content-length] - :response-time ms
-app.use(morgan('tiny'))
+// app.use(morgan('tiny'))
 
 // create new token for morgan to use
 morgan.token('body', (req, res) => JSON.stringify(req.body))
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
-// app.use(requestLogger)
+app.use(cors())
 
 app.get('/', (req, res) => {
   res.send('<h1>This is my phonebook</h1>')
@@ -123,7 +116,7 @@ const unknownEndpoint = (req, res) => {
 
 app.use(unknownEndpoint)
 
-const PORT = 3001
+const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
