@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const app = express()
 const cors = require('cors')
@@ -5,30 +6,7 @@ const cors = require('cors')
 // morgan is HTTP request logger middleware for node.js
 const morgan = require('morgan')
 
-let persons = [
-  {
-    id: 1,
-    name: "Arto Hellas",
-    number: "040-123456",
-  },
-  {
-    id: 2,
-    name: "Ada Lovelace",
-    number: "39-44-5323523"
-    
-  },
-  {
-    id: 3,
-    name: "Dan Abramov",
-    number: "12-43-234345"
-  },
-  {
-    id: 4,
-    name: "Mary Poppendieck",
-    number: "39-23-6423122"
-  }
-]
-
+const Person = require('./models/person')
 
 app.use(express.json())
 
@@ -36,7 +14,7 @@ app.use(express.json())
 // app.use(morgan('tiny'))
 
 // create new token for morgan to use
-morgan.token('body', (req, res) => JSON.stringify(req.body))
+morgan.token('body', (req) => JSON.stringify(req.body))
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
 app.use(cors())
@@ -48,69 +26,90 @@ app.get('/', (req, res) => {
   res.send('<h1>This is my phonebook</h1>')
 })
 
-app.get('/info', (req, res) => {
+app.get('/info', (req, res, next) => {
   let date = new Date()
-  let info = `<p>Phonebook has info for ${persons.length} people</p>
-  <p>${date}</p>`
-  res.send(info)
+  Person.find({}).then(persons =>  {
+    let info = `<p>Phonebook has info for ${persons.length} people</p>
+    <p>${date}</p>`
+    res.send(info)
+  })
+    .catch(error => next(error))
 })
 
 app.get('/api/persons', (req, res) => {
-  res.json(persons)
+  Person.find({}).then(people => res.json(people))
 })
 
-app.get('/api/persons/:id', (req, res) => {
-  console.log(req.body)
-  const id = Number(req.params.id)
-  console.log('id', id)
-  const person = persons.find( person => {
-    // console.log(person.id, typeof person.id, id, typeof id, person.id === id)
-    return person.id === id
-  })
-  console.log('person:', person)
+app.get('/api/persons/:id', (req, res, next) => {
+  // console.log(req.body)
+  // console.log('id', req.params.id)
 
-  if (person) {
-    res.json(person)
-  } else {
-    res.status(404).end()
-  }
+  Person.findById(req.params.id)
+    .then(person => {
+      if (person) {
+        res.json(person)
+      } else {
+        res.status(404).end()
+      }
+    })
+    .catch(error => next(error))
 })
 
-app.delete('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id)
-  console.log('delete person with id', id)
-  persons = persons.filter(person => person.id !== id)
-  console.log('new persons', persons)
-  res.status(204).end()
+app.delete('/api/persons/:id', (req, res, next) => {
+  // console.log('delete person with id', req.params.id)
+  Person.findByIdAndRemove(req.params.id)
+    .then( () => {
+      res.status(204).end()
+    })
+    .catch(error => next(error))
 })
 
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
   const body = req.body
-  console.log('body', body)
+  // console.log('body', body)
 
-  if(!body.number) {
-    return res.status(400).json({error: 'number is missing'})
+  if(body.number === undefined) {
+    return res.status(400).json({ error: 'number is missing' })
   }
-  if(!body.name) {
-    return res.status(400).json({error: 'name is missing'})
-  }
-
-  if (persons.filter(person => person.name === body.name).length > 0) {
-    return res.status(400).json({error: 'name is already in phonebook, name must be unique'})
+  if(body.name === undefined) {
+    return res.status(400).json({ error: 'name is missing' })
   }
 
-  const getRandomNumber = (min, max) => {
-    return Math.floor(Math.random() *(max - min) + min)
-  }
+  const person = new Person({
+    name: body.name,
+    number: body.number
+  })
+
+  person.save()
+    .then(savedPerson => {
+      res.json(savedPerson)
+      console.log(`added ${body.name} number ${body.number} to phonebook`)
+    })
+    .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+  const body = req.body
+  // console.log("req.body", body)
+
   const person = {
     name: body.name,
-    number: body.number,
-    id: getRandomNumber(2, 999999)
+    number: body.number
   }
 
-  persons = persons.concat(person)
-
-  res.json(person)
+  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+    .then(updatedPerson => {
+      // console.log('updatedPerson:', updatedPerson)
+      if (updatedPerson) {
+        res.json(updatedPerson)
+      } else {
+        res.status(404).end()
+      }
+    })
+    .catch(error => {
+      console.log('error:', error)
+      next(error)
+    })
 })
 
 const unknownEndpoint = (req, res) => {
@@ -118,6 +117,23 @@ const unknownEndpoint = (req, res) => {
 }
 
 app.use(unknownEndpoint)
+
+const errorHandler = (error, req, res, next) => {
+  console.log('in errorHandler, error.name: ', error.name)
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return res.status(400).send({ error: 'malformatted id' })
+  }
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({ error: error.message })
+  }
+
+  next(error)
+}
+
+// this has to be the last loaded middleware
+app.use(errorHandler)
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
